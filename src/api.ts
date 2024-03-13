@@ -14,10 +14,20 @@ export async function resolveTextEditorOptions(
 		onBeforeResolve?: (relativePath: string) => void
 		onEmptyConfig?: (relativePath: string) => void
 	} = {},
+	log?: (...messages: string[]) => void,
 ) {
 	const editorconfigSettings = await resolveCoreConfig(doc, {
 		onBeforeResolve,
 	})
+
+	if (log && editorconfigSettings) {
+		log(
+			doc.uri.fsPath,
+			'resolved EditorConfig from files:',
+			JSON.stringify(editorconfigSettings),
+		)
+	}
+
 	if (editorconfigSettings) {
 		return fromEditorConfig(editorconfigSettings, pickWorkspaceDefaults(doc))
 	}
@@ -61,9 +71,7 @@ export async function applyTextEditorOptions(
 /**
  * Picks EditorConfig-relevant props from the editor's default configuration.
  */
-export function pickWorkspaceDefaults(
-	doc?: TextDocument,
-): {
+export function pickWorkspaceDefaults(doc?: TextDocument): {
 	/**
 	 * The number of spaces a tab is equal to. When `editor.detectIndentation`
 	 * is on, this property value will be `undefined`.
@@ -74,6 +82,10 @@ export function pickWorkspaceDefaults(
 	 * this property value will be `undefined`.
 	 */
 	insertSpaces?: boolean
+	/**
+	 * Whether the editor automatically detects the indentation of the file
+	 */
+	detectIndentation?: boolean
 } {
 	const workspaceConfig = workspace.getConfiguration('editor', doc)
 	const detectIndentation = workspaceConfig.get<boolean>('detectIndentation')
@@ -83,7 +95,8 @@ export function pickWorkspaceDefaults(
 		: {
 				tabSize: workspaceConfig.get<number>('tabSize'),
 				insertSpaces: workspaceConfig.get<boolean>('insertSpaces'),
-		  }
+				detectIndentation: workspaceConfig.get<boolean>('detectIndentation'),
+			}
 }
 
 export type ResolvedCoreConfig = editorconfig.KnownProps &
@@ -108,16 +121,14 @@ export async function resolveCoreConfig(
 	if (relativePath) {
 		onBeforeResolve?.(relativePath)
 	}
-	const config = await editorconfig.parse(fileName)
+	const config = await editorconfig.parse(fileName, { unset: true })
 	if (config.indent_size === 'tab') {
 		config.indent_size = config.tab_width
 	}
 	return config as ResolvedCoreConfig
 }
 
-export function resolveFile(
-	doc: TextDocument,
-): {
+export function resolveFile(doc: TextDocument): {
 	fileName?: string
 	relativePath?: string
 } {
@@ -163,10 +174,10 @@ export function fromEditorConfig(
 		config.indent_style === 'space'
 			? {
 					insertSpaces: config.indent_style === 'space',
-			  }
+				}
 			: {}),
 		tabSize:
-			resolved.tabSize && resolved.tabSize >= 0
+			resolved.tabSize && (resolved.tabSize as number) >= 0 //Docs say this always will be an number when resolving so this type assertion should be safe.
 				? resolved.tabSize
 				: defaults.tabSize,
 	}

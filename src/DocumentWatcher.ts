@@ -19,7 +19,6 @@ import {
 import {
 	applyTextEditorOptions,
 	resolveCoreConfig,
-	resolveFile,
 	resolveTextEditorOptions,
 } from './api'
 
@@ -39,43 +38,43 @@ export default class DocumentWatcher {
 
 		const subscriptions: Disposable[] = []
 
+		// Process the existing text editor
+		// TODO: Handle this fire-and-forget async method for errors
 		this.handleTextEditorChange(window.activeTextEditor)
 
 		subscriptions.push(
 			window.onDidChangeActiveTextEditor(async editor => {
-				this.handleTextEditorChange(editor)
+				await this.handleTextEditorChange(editor)
 			}),
-		)
 
-		subscriptions.push(
 			window.onDidChangeWindowState(async state => {
 				if (state.focused && this.doc) {
-					const newOptions = await resolveTextEditorOptions(this.doc, {
-						onEmptyConfig: this.onEmptyConfig,
-					})
-					applyTextEditorOptions(newOptions, {
+					const newOptions = await resolveTextEditorOptions(
+						this.doc,
+						{
+							onEmptyConfig: this.onEmptyConfig,
+						},
+						this.log.bind(this),
+					)
+					await applyTextEditorOptions(newOptions, {
 						onNoActiveTextEditor: this.onNoActiveTextEditor,
 						onSuccess: this.onSuccess,
 					})
 				}
 			}),
-		)
 
-		subscriptions.push(
 			workspace.onDidSaveTextDocument(doc => {
 				if (path.basename(doc.fileName) === '.editorconfig') {
 					this.log('.editorconfig file saved.')
 				}
 			}),
-		)
 
-		subscriptions.push(
 			workspace.onWillSaveTextDocument(async e => {
 				let selections: Selection[] = []
 				const activeEditor = window.activeTextEditor
 				const activeDoc = activeEditor?.document
 				if (activeDoc && activeDoc === e.document && activeEditor) {
-					selections = activeEditor.selections
+					selections.push(...activeEditor.selections)
 				}
 				const transformations = this.calculatePreSaveTransformations(
 					e.document,
@@ -112,8 +111,11 @@ export default class DocumentWatcher {
 			this.log(`[no file]: ${JSON.stringify(newOptions)}`)
 			return
 		}
-		const { relativePath } = resolveFile(this.doc)
-		this.log(`${relativePath}: ${JSON.stringify(newOptions)}`)
+		this.log(
+			this.doc.uri.fsPath,
+			'EditorConfig SET:',
+			JSON.stringify(newOptions),
+		)
 	}
 
 	public log(...messages: string[]) {
@@ -164,6 +166,7 @@ export default class DocumentWatcher {
 				{
 					onEmptyConfig: this.onEmptyConfig,
 				},
+				this.log.bind(this),
 			)
 			applyTextEditorOptions(newOptions, {
 				onNoActiveTextEditor: this.onNoActiveTextEditor,
