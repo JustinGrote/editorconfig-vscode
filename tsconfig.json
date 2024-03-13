@@ -16,5 +16,5 @@
     "strict": true,
     "target": "ES2019"
   },
-  "exclude": ["node_modules", "out", ".vscode-test"]
+  "exclude": ["node_modules", "out", ".vscode-test", "src/test/"]
 }

@@ -30,13 +30,15 @@ export async function generateEditorConfig(uri: Uri) {
 			return
 		}
 	} catch (err) {
-		if (err) {
+		if (err instanceof Error) {
 			if (err.name === 'EntryNotFound (FileSystemError)') {
 				writeFile()
 			} else {
 				window.showErrorMessage(err.message)
 			}
 			return
+		} else {
+			throw err
 		}
 	}
 
@@ -58,19 +60,30 @@ export async function generateEditorConfig(uri: Uri) {
 					/^default$/i.test(template) ? defaultTemplatePath : template,
 				)
 			} catch (error) {
-				window.showErrorMessage(
-					[
-						`Could not read EditorConfig template file at ${template}`,
-						error.message,
-					].join(EOL),
-				)
+				if (error instanceof Error) {
+					window.showErrorMessage(
+						[
+							`Could not read EditorConfig template file at ${template}`,
+							error.message,
+						].join(EOL),
+					)
+					return
+				}
+				throw error
+			}
+			if (templateBuffer == undefined) {
+				window.showErrorMessage('Could not read EditorConfig template file.')
 				return
 			}
 
 			try {
 				workspace.fs.writeFile(editorConfigUri, templateBuffer)
 			} catch (error) {
-				window.showErrorMessage(error.message)
+				if (error instanceof Error) {
+					window.showErrorMessage(error.message)
+					return
+				}
+				throw error
 			}
 
 			return
@@ -139,10 +152,11 @@ export async function generateEditorConfig(uri: Uri) {
 				Buffer.from(settingsLines.join(eolKey)),
 			)
 		} catch (err) {
-			if (err) {
+			if (err instanceof Error) {
 				window.showErrorMessage(err.message)
 				return
 			}
+			throw err
 		}
 	}
 }
