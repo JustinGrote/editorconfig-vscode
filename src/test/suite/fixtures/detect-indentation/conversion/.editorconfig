@@ -1,0 +1,5 @@
+[space-to-tab]
+indent_style = tab
+
+[tab-to-space]
+indent_style = space
