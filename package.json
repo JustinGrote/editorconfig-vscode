@@ -55,6 +55,16 @@
           "type": "string",
           "default": "default",
           "description": "If generateAuto is false, this template path will be used for each newly-generated .editorconfig file."
+        },
+        "editorconfig.useTabSize": {
+          "type": "boolean",
+          "default": false,
+          "description": "By default, the extension will use your preferred editor tab size for indentation even if the editorconfig specifies otherwise, since the save format does not change. Set this to true to explicitly use the tab sizes specified in the editorConfig files, if present."
+        },
+        "editorconfig.autoApply": {
+          "type": "boolean",
+          "default": false,
+          "description": "By default, the extension will prompt you if it detects a difference between your EditorConfig and the file format. By setting this to 'true', the extension will automatically apply the changes without prompting."
         }
       }
     },

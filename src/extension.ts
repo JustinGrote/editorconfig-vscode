@@ -9,8 +9,7 @@ import {
 import {
 	applyTextEditorOptions,
 	fromEditorConfig,
-	resolveCoreConfig,
-	resolveTextEditorOptions,
+	resolveEditorConfigOptions,
 	toEditorConfig,
 } from './api'
 import { generateEditorConfig } from './commands/generateEditorConfig'
@@ -29,7 +28,9 @@ export function activate(ctx: ExtensionContext) {
 		return
 	}
 
-	ctx.subscriptions.push(new EditorConfigDocumentWatcher())
+	const logger = window.createOutputChannel('EditorConfig', { log: true })
+
+	ctx.subscriptions.push(new EditorConfigDocumentWatcher(logger))
 
 	// register .editorconfig file completion provider
 	const editorConfigFileSelector: DocumentSelector = {
@@ -56,8 +57,7 @@ export function activate(ctx: ExtensionContext) {
 	return {
 		applyTextEditorOptions,
 		fromEditorConfig,
-		resolveCoreConfig,
-		resolveTextEditorOptions,
+		resolveTextEditorOptions: resolveEditorConfigOptions,
 		toEditorConfig,
 	}
 }

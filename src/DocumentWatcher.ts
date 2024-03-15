@@ -1,11 +1,10 @@
-import * as path from 'path'
 import {
 	Disposable,
+	LogOutputChannel,
 	Selection,
 	TextDocument,
 	TextDocumentSaveReason,
 	TextEditor,
-	TextEditorOptions,
 	window,
 	workspace,
 } from 'vscode'
@@ -18,55 +17,31 @@ import {
 
 import {
 	applyTextEditorOptions,
-	resolveCoreConfig,
-	resolveTextEditorOptions,
+	resolveEditorConfigFromFiles,
+	resolveEditorConfigOptions,
 } from './api'
 
+/**
+ * Watches for changes to the active text editor and applies EditorConfig settings if required
+ */
 export default class DocumentWatcher {
-	private disposable: Disposable
+	private subscriptions: Disposable[] = []
 	private preSaveTransformations: PreSaveTransformation[] = [
 		new SetEndOfLine(),
 		new TrimTrailingWhitespace(),
 		new InsertFinalNewline(),
 	]
-	private doc?: TextDocument
 
-	public constructor(
-		private outputChannel = window.createOutputChannel('EditorConfig'),
-	) {
+	public constructor(public logger: LogOutputChannel) {
 		this.log('Initializing document watcher...')
-
-		const subscriptions: Disposable[] = []
 
 		// Process the existing text editor
 		// TODO: Handle this fire-and-forget async method for errors
-		this.handleTextEditorChange(window.activeTextEditor)
+		this.handleChangeActiveTextEditor(window.activeTextEditor)
 
-		subscriptions.push(
+		this.subscriptions.push(
 			window.onDidChangeActiveTextEditor(async editor => {
-				await this.handleTextEditorChange(editor)
-			}),
-
-			window.onDidChangeWindowState(async state => {
-				if (state.focused && this.doc) {
-					const newOptions = await resolveTextEditorOptions(
-						this.doc,
-						{
-							onEmptyConfig: this.onEmptyConfig,
-						},
-						this.log.bind(this),
-					)
-					await applyTextEditorOptions(newOptions, {
-						onNoActiveTextEditor: this.onNoActiveTextEditor,
-						onSuccess: this.onSuccess,
-					})
-				}
-			}),
-
-			workspace.onDidSaveTextDocument(doc => {
-				if (path.basename(doc.fileName) === '.editorconfig') {
-					this.log('.editorconfig file saved.')
-				}
+				await this.handleChangeActiveTextEditor(editor)
 			}),
 
 			workspace.onWillSaveTextDocument(async e => {
@@ -88,9 +63,29 @@ export default class DocumentWatcher {
 					}
 				}
 			}),
+
+			// workspace.onDidSaveTextDocument(doc => {
+			// 	if (path.basename(doc.fileName) === '.editorconfig') {
+			// 		this.log('.editorconfig file saved.')
+			// 	}
+			// }),
+			// window.onDidChangeWindowState(async state => {
+			// 	if (state.focused && this.doc) {
+			// 		const newOptions = await resolveTextEditorOptions(
+			// 			this.doc,
+			// 			{
+			// 				onEmptyConfig: this.onEmptyConfig,
+			// 			},
+			// 			this.log.bind(this),
+			// 		)
+			// 		await applyTextEditorOptions(newOptions, {
+			// 			onNoActiveTextEditor: this.onNoActiveTextEditor,
+			// 			onSuccess: this.onSuccess,
+			// 		})
+			// 	}
+			// }),
 		)
 
-		this.disposable = Disposable.from.apply(this, subscriptions)
 		this.log('Document watcher initialized')
 	}
 
@@ -106,31 +101,19 @@ export default class DocumentWatcher {
 		this.log('No more open editors.')
 	}
 
-	public onSuccess = (newOptions: TextEditorOptions) => {
-		if (!this.doc) {
-			this.log(`[no file]: ${JSON.stringify(newOptions)}`)
-			return
-		}
-		this.log(
-			this.doc.uri.fsPath,
-			'EditorConfig SET:',
-			JSON.stringify(newOptions),
-		)
-	}
-
 	public log(...messages: string[]) {
-		this.outputChannel.appendLine(messages.join(' '))
+		this.logger.info(messages.join(' '))
 	}
 
 	public dispose() {
-		this.disposable.dispose()
+		this.subscriptions.forEach(d => d.dispose())
 	}
 
 	private async calculatePreSaveTransformations(
 		doc: TextDocument,
 		reason: TextDocumentSaveReason,
 	) {
-		const editorconfigSettings = await resolveCoreConfig(doc, {
+		const editorconfigSettings = await resolveEditorConfigFromFiles(doc, {
 			onBeforeResolve: this.onBeforeResolve,
 		})
 		const relativePath = workspace.asRelativePath(doc.fileName)
@@ -159,19 +142,20 @@ export default class DocumentWatcher {
 		]
 	}
 
-	private async handleTextEditorChange(editor?: TextEditor) {
-		if (editor && editor.document) {
-			const newOptions = await resolveTextEditorOptions(
-				(this.doc = editor.document),
-				{
-					onEmptyConfig: this.onEmptyConfig,
-				},
-				this.log.bind(this),
-			)
-			applyTextEditorOptions(newOptions, {
-				onNoActiveTextEditor: this.onNoActiveTextEditor,
-				onSuccess: this.onSuccess,
-			})
+	private async handleChangeActiveTextEditor(editor?: TextEditor) {
+		if (editor?.document === undefined) {
+			this.log('No document in active text editor. Nothing to do.')
+			return
 		}
+
+		const desiredOptions = await resolveEditorConfigOptions(
+			editor.document,
+			{
+				onEmptyConfig: this.onEmptyConfig,
+			},
+			this.logger,
+		)
+
+		applyTextEditorOptions(editor, desiredOptions, this.logger)
 	}
 }
